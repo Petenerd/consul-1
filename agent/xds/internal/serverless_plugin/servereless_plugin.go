@@ -31,8 +31,8 @@ func MutateIndexedResources(resources *shared.IndexedResources, config shared.Mu
 				serviceName = name[:i]
 			}
 
-			patcher, ok := patchers[serviceName]
-			if !ok {
+			patcher, err := GetPatcherByName(config, patchers, config.Kind, serviceName)
+			if err != nil {
 				continue
 			}
 
@@ -43,7 +43,7 @@ func MutateIndexedResources(resources *shared.IndexedResources, config shared.Mu
 
 		for sni, msg := range resources.Index[shared.ClusterType] {
 
-			patcher, err := GetPacherBySni(config, patchers, sni)
+			patcher, err := GetPatcherBySni(config, patchers, config.Kind, sni)
 
 			if err != nil {
 				continue
@@ -60,7 +60,7 @@ func MutateIndexedResources(resources *shared.IndexedResources, config shared.Mu
 		}
 	case structs.ServiceKindTerminatingGateway:
 		for sni, msg := range resources.Index[shared.ClusterType] {
-			patcher, err := GetPacherBySni(config, patchers, sni)
+			patcher, err := GetPatcherBySni(config, patchers, config.Kind, sni)
 
 			if err != nil {
 				continue
@@ -91,7 +91,7 @@ func MutateIndexedResources(resources *shared.IndexedResources, config shared.Mu
 		}
 
 		for sni, msg := range resources.Index[shared.RouteType] {
-			patcher, err := GetPacherBySni(config, patchers, sni)
+			patcher, err := GetPatcherBySni(config, patchers, config.Kind, sni)
 
 			if err != nil {
 				continue
@@ -125,7 +125,7 @@ func patchTerminatingGatewayListener(l *envoy_listener_v3.Listener, config share
 	for _, filterChain := range l.FilterChains {
 		sni := getSni(filterChain)
 
-		patcher, err := GetPacherBySni(config, patchers, sni)
+		patcher, err := GetPatcherBySni(config, patchers, config.Kind, sni)
 
 		if err != nil {
 			continue
@@ -160,24 +160,34 @@ func GetPatchers(config shared.MutateConfiguration) Patchers {
 	return patchers
 }
 
-func GetPacherBySni(config shared.MutateConfiguration, patchers Patchers, name string) (Patcher, error) {
-	var patcher Patcher
+func GetPatcherByName(config shared.MutateConfiguration, patchers Patchers, kind structs.ServiceKind, name string) (Patcher, error) {
+	patcher, ok := patchers[name]
 
-	serviceName, ok := config.SniToServiceName[name]
-
-	if !ok {
-		return patcher, fmt.Errorf("No sni mapping for service")
-	}
-
-	patcher, ok = patchers[serviceName]
 	if !ok {
 		return patcher, fmt.Errorf("No patcher for service")
+	}
+
+	if !patcher.canPatch(kind) {
+		return patcher, fmt.Errorf("No patcher for the service's kind")
 	}
 
 	return patcher, nil
 }
 
+func GetPatcherBySni(config shared.MutateConfiguration, patchers Patchers, kind structs.ServiceKind, sni string) (Patcher, error) {
+	var patcher Patcher
+
+	serviceName, ok := config.SniToServiceName[sni]
+
+	if !ok {
+		return patcher, fmt.Errorf("No sni mapping for service")
+	}
+
+	return GetPatcherByName(config, patchers, kind, serviceName)
+}
+
 type Patcher interface {
+	canPatch(structs.ServiceKind) bool
 	patchRoute(proto.Message) error
 	patchCluster(proto.Message) (proto.Message, error)
 	patchConnectProxyListener(proto.Message) (proto.Message, error)

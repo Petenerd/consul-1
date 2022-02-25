@@ -123,7 +123,8 @@ type configSnapshotConnectProxy struct {
 
 	// ServiceConfigs is a map of service name to the resolved service config
 	// for that service.
-	ServiceConfigs map[structs.ServiceName]*structs.ServiceConfigEntry
+	ServiceConfigs        map[UpstreamID]*structs.ServiceConfigEntry
+	WatchedServiceConfigs map[UpstreamID]context.CancelFunc
 }
 
 func (c *configSnapshotConnectProxy) IsEmpty() bool {

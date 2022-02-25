@@ -381,7 +381,7 @@ func ingressConfigWatchEvent(gwTLS bool, mixedTLS bool) cache.UpdateEvent {
 
 var serviceDefaults = &structs.ServiceConfigEntry{
 	Kind: structs.ServiceDefaults,
-	Name: "thingy",
+	Name: "api",
 	Meta: map[string]string{"a": "1"},
 }
 
@@ -632,10 +632,9 @@ func TestState_WatchesAndUpdates(t *testing.T) {
 					Err: nil,
 				},
 				{
-					CorrelationID: serviceDefaultsConfigEntryID,
-					Result: &structs.IndexedConfigEntries{
-						Kind:    structs.ServiceDefaults,
-						Entries: []structs.ConfigEntry{serviceDefaults},
+					CorrelationID: serviceDefaultsConfigEntryID + serviceDefaults.Name,
+					Result: &structs.ConfigEntryResponse{
+						Entry: serviceDefaults,
 					},
 					Err: nil,
 				},
