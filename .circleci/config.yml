@@ -270,7 +270,12 @@ jobs:
       - run: go mod download
       - run:
           name: make dev
-          command: if [[ "$CIRCLE_BRANCH" =~ ^main$|^release/ ]]; then make dev; fi
+          command: |
+            if [[ "$CIRCLE_BRANCH" =~ ^main$|^release/ ]]; then
+              make dev
+              mkdir -p /home/circleci/bin
+              cp ./bin/consul /home/circleci/bin/consul
+            fi
       - run-go-test-full:
           go_test_flags: 'if ! [[ "$CIRCLE_BRANCH" =~ ^main$|^release/ ]]; then export GO_TEST_FLAGS="-short"; fi'
       
@@ -742,20 +747,15 @@ jobs:
             if ! git diff --quiet --exit-code HEAD^! ui/; then
               git config --local user.email "github-team-consul-core@hashicorp.com"
               git config --local user.name "hc-github-team-consul-core"
-              
-              # stash newly built bindata_assetfs.go
-              git stash push
-              
-              # checkout the CI branch and merge latest from main
-              git checkout ci/main-assetfs-build
-              git merge --no-edit main
             
-              git stash pop
+              # -B resets the CI branch to main which may diverge history
+              # but we will force push anyways.
+              git checkout -B ci/main-assetfs-build main
             
               short_sha=$(git rev-parse --short HEAD)
               git add agent/uiserver/bindata_assetfs.go
               git commit -m "auto-updated agent/uiserver/bindata_assetfs.go from commit ${short_sha}"
-              git push origin ci/main-assetfs-build
+              git push --force origin ci/main-assetfs-build
             else
               echo "no UI changes so no static assets to publish"
             fi
@@ -889,20 +889,20 @@ jobs:
           path: *TEST_RESULTS_DIR
       - run: *notify-slack-failure
 
-  envoy-integration-test-1_18_4:
+  envoy-integration-test-1_18_6:
     <<: *ENVOY_TESTS
     environment:
-      ENVOY_VERSION: "1.18.4"
+      ENVOY_VERSION: "1.18.6"
 
-  envoy-integration-test-1_19_1:
+  envoy-integration-test-1_19_3:
     <<: *ENVOY_TESTS
     environment:
-      ENVOY_VERSION: "1.19.1"
+      ENVOY_VERSION: "1.19.3"
 
-  envoy-integration-test-1_20_1:
+  envoy-integration-test-1_20_2:
     <<: *ENVOY_TESTS
     environment:
-      ENVOY_VERSION: "1.20.1"
+      ENVOY_VERSION: "1.20.2"
 
   # run integration tests for the connect ca providers
   test-connect-ca-providers:
@@ -1039,7 +1039,7 @@ workflows:
   # verify-ci is a no-op workflow that must run on every PR. It is used in a
   # branch protection rule to detect when CI workflows are not running.
   verify-ci:
-    jobs: [noop]
+    jobs: [ noop ]
 
   go-tests:
     unless: << pipeline.parameters.trigger-load-test >>
@@ -1062,17 +1062,17 @@ workflows:
       - go-test-arm64: *filter-ignore-non-go-branches
       - dev-build: *filter-ignore-non-go-branches
       - go-test:
-          requires: [dev-build]
+          requires: [ dev-build ]
       - go-test-lib:
           name: "go-test-api go1.16"
           path: api
           go-version: "1.16"
-          requires: [dev-build]
+          requires: [ dev-build ]
       - go-test-lib:
           name: "go-test-api go1.17"
           path: api
           go-version: "1.17"
-          requires: [dev-build]
+          requires: [ dev-build ]
       - go-test-lib:
           name: "go-test-sdk go1.16"
           path: sdk
@@ -1148,13 +1148,13 @@ workflows:
       - envoy-integration-test-1_17_4:
           requires:
             - dev-build
-      - envoy-integration-test-1_18_4:
+      - envoy-integration-test-1_18_6:
           requires:
             - dev-build
-      - envoy-integration-test-1_19_1:
+      - envoy-integration-test-1_19_3:
           requires:
             - dev-build
-      - envoy-integration-test-1_20_1:
+      - envoy-integration-test-1_20_2:
           requires:
             - dev-build
 

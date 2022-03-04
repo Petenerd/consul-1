@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,6 +20,7 @@ import (
 	"go.etcd.io/bbolt"
 
 	"github.com/armon/go-metrics"
+	"github.com/hashicorp/consul-net-rpc/net/rpc"
 	connlimit "github.com/hashicorp/go-connlimit"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-memdb"
@@ -822,7 +822,7 @@ func (s *Server) setupRaft() error {
 
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
-	if s.config.Bootstrap || s.config.DevMode {
+	if (s.config.Bootstrap || s.config.DevMode) && !s.config.ReadReplica {
 		hasState, err := raft.HasExistingState(log, stable, snap)
 		if err != nil {
 			return err

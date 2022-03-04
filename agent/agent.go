@@ -1368,14 +1368,14 @@ func (a *Agent) ShutdownAgent() error {
 	// this should help them to be stopped more quickly
 	a.baseDeps.AutoConfig.Stop()
 
+	a.stateLock.Lock()
+	defer a.stateLock.Unlock()
 	// Stop the service manager (must happen before we take the stateLock to avoid deadlock)
 	if a.serviceManager != nil {
 		a.serviceManager.Stop()
 	}
 
 	// Stop all the checks
-	a.stateLock.Lock()
-	defer a.stateLock.Unlock()
 	for _, chk := range a.checkMonitors {
 		chk.Stop()
 	}
@@ -2120,10 +2120,22 @@ func (a *Agent) addServiceInternal(req addServiceInternalRequest) error {
 		if name == "" {
 			name = fmt.Sprintf("Service '%s' check", service.Service)
 		}
+
+		var intervalStr string
+		var timeoutStr string
+		if chkType.Interval != 0 {
+			intervalStr = chkType.Interval.String()
+		}
+		if chkType.Timeout != 0 {
+			timeoutStr = chkType.Interval.String()
+		}
+
 		check := &structs.HealthCheck{
 			Node:           a.config.NodeName,
 			CheckID:        types.CheckID(checkID),
 			Name:           name,
+			Interval:       intervalStr,
+			Timeout:        timeoutStr,
 			Status:         api.HealthCritical,
 			Notes:          chkType.Notes,
 			ServiceID:      service.ID,

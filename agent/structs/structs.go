@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-msgpack/codec"
+	"github.com/hashicorp/consul-net-rpc/go-msgpack/codec"
 	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/serf/coordinate"
 	"github.com/mitchellh/hashstructure"
@@ -452,7 +452,7 @@ func (r *RegisterRequest) ChangesNode(node *Node) bool {
 
 	// Check if any of the node-level fields are being changed.
 	if r.ID != node.ID ||
-		r.Node != node.Node ||
+		!strings.EqualFold(r.Node, node.Node) ||
 		r.PartitionOrDefault() != node.PartitionOrDefault() ||
 		r.Address != node.Address ||
 		r.Datacenter != node.Datacenter ||
@@ -796,7 +796,7 @@ type Nodes []*Node
 // RaftIndex fields.
 func (n *Node) IsSame(other *Node) bool {
 	return n.ID == other.ID &&
-		n.Node == other.Node &&
+		strings.EqualFold(n.Node, other.Node) &&
 		n.PartitionOrDefault() == other.PartitionOrDefault() &&
 		n.Address == other.Address &&
 		n.Datacenter == other.Datacenter &&
@@ -1431,7 +1431,7 @@ func (s *ServiceNode) IsSameService(other *ServiceNode) bool {
 	// TaggedAddresses          map[string]string
 	// NodeMeta                 map[string]string
 	if s.ID != other.ID ||
-		s.Node != other.Node ||
+		!strings.EqualFold(s.Node, other.Node) ||
 		s.ServiceKind != other.ServiceKind ||
 		s.ServiceID != other.ServiceID ||
 		s.ServiceName != other.ServiceName ||
@@ -1675,7 +1675,7 @@ func (t *HealthCheckDefinition) UnmarshalJSON(data []byte) (err error) {
 // useful for seeing if an update would be idempotent for all the functional
 // parts of the structure.
 func (c *HealthCheck) IsSame(other *HealthCheck) bool {
-	if c.Node != other.Node ||
+	if !strings.EqualFold(c.Node, other.Node) ||
 		c.CheckID != other.CheckID ||
 		c.Name != other.Name ||
 		c.Status != other.Status ||
@@ -1741,7 +1741,7 @@ type CheckServiceNode struct {
 	Checks  HealthChecks
 }
 
-func (csn *CheckServiceNode) BestAddress(wan bool) (string, int) {
+func (csn *CheckServiceNode) BestAddress(wan bool) (uint64, string, int) {
 	// TODO (mesh-gateway) needs a test
 	// best address
 	// wan
@@ -1754,12 +1754,14 @@ func (csn *CheckServiceNode) BestAddress(wan bool) (string, int) {
 	//   node addr
 
 	addr, port := csn.Service.BestAddress(wan)
+	idx := csn.Service.ModifyIndex
 
 	if addr == "" {
 		addr = csn.Node.BestAddress(wan)
+		idx = csn.Node.ModifyIndex
 	}
 
-	return addr, port
+	return idx, addr, port
 }
 
 func (csn *CheckServiceNode) CanRead(authz acl.Authorizer) acl.EnforcementDecision {

@@ -218,26 +218,27 @@ func (s *ResourceGenerator) listenersFromSnapshotConnectProxy(cfgSnap *proxycfg.
 		// as opposed to via a virtual IP.
 		var passthroughChains []*envoy_listener_v3.FilterChain
 
-		for uid, passthrough := range cfgSnap.ConnectProxy.PassthroughUpstreams {
-			u := structs.Upstream{
-				DestinationName:      uid.Name,
-				DestinationNamespace: uid.NamespaceOrDefault(),
-				DestinationPartition: uid.PartitionOrDefault(),
+		for _, targets := range cfgSnap.ConnectProxy.PassthroughUpstreams {
+			for tid, addrs := range targets {
+				uid := proxycfg.NewUpstreamIDFromTargetID(tid)
+
+				sni := connect.ServiceSNI(
+					uid.Name, "", uid.NamespaceOrDefault(), uid.PartitionOrDefault(), cfgSnap.Datacenter, cfgSnap.Roots.TrustDomain)
+
+				filterName := fmt.Sprintf("%s.%s.%s.%s", uid.Name, uid.NamespaceOrDefault(), uid.PartitionOrDefault(), cfgSnap.Datacenter)
+
+				filterChain, err := s.makeUpstreamFilterChain(filterChainOpts{
+					clusterName: "passthrough~" + sni,
+					filterName:  filterName,
+					protocol:    "tcp",
+				})
+				if err != nil {
+					return nil, err
+				}
+				filterChain.FilterChainMatch = makeFilterChainMatchFromAddrs(addrs)
+
+				passthroughChains = append(passthroughChains, filterChain)
 			}
-
-			filterName := fmt.Sprintf("%s.%s.%s.%s", u.DestinationName, u.DestinationNamespace, u.DestinationPartition, cfgSnap.Datacenter)
-
-			filterChain, err := s.makeUpstreamFilterChain(filterChainOpts{
-				clusterName: "passthrough~" + passthrough.SNI,
-				filterName:  filterName,
-				protocol:    "tcp",
-			})
-			if err != nil {
-				return nil, err
-			}
-			filterChain.FilterChainMatch = makeFilterChainMatchFromAddrs(passthrough.Addrs)
-
-			passthroughChains = append(passthroughChains, filterChain)
 		}
 
 		outboundListener.FilterChains = append(outboundListener.FilterChains, passthroughChains...)
@@ -1303,7 +1304,7 @@ func (s *ResourceGenerator) getAndModifyUpstreamConfigForListener(
 		configMap = u.Config
 	}
 	if chain == nil || chain.IsDefault() {
-		cfg, err = structs.ParseUpstreamConfig(configMap)
+		cfg, err = structs.ParseUpstreamConfigNoDefaults(configMap)
 		if err != nil {
 			// Don't hard fail on a config typo, just warn. The parse func returns
 			// default config if there is an error so it's safe to continue.
@@ -1326,18 +1327,18 @@ func (s *ResourceGenerator) getAndModifyUpstreamConfigForListener(
 			// Remove from config struct so we don't use it later on
 			cfg.EnvoyListenerJSON = ""
 		}
-
-		protocol := cfg.Protocol
-		if protocol == "" {
-			protocol = chain.Protocol
-		}
-		if protocol == "" {
-			protocol = "tcp"
-		}
-
-		// set back on the config so that we can use it from return value
-		cfg.Protocol = protocol
 	}
+
+	protocol := cfg.Protocol
+	if protocol == "" {
+		protocol = chain.Protocol
+	}
+	if protocol == "" {
+		protocol = "tcp"
+	}
+
+	// set back on the config so that we can use it from return value
+	cfg.Protocol = protocol
 
 	return cfg
 }
